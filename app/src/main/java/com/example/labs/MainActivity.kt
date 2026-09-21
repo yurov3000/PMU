@@ -56,21 +56,23 @@ enum class ZodiacSign(
         fun getZodiac(month: Int, day: Int): ZodiacSign {
             for (sign in values()) {
                 if (sign.startMonth < sign.endMonth) {
+                    // Обычные знаки (например, Телец: с 4 по 5 месяц)
                     if ((month == sign.startMonth && day >= sign.startDay) ||
                         (month == sign.endMonth && day <= sign.endDay) ||
                         (month > sign.startMonth && month < sign.endMonth)
                     ) {
-                        return sign;
-                    } else {
-                        // Козерог (переход через год)
-                        if (month == sign.startMonth && day >= sign.startDay) return sign
-                        if (month == sign.endMonth && day <= sign.endDay) return sign
-                        if (month > sign.startMonth || month < sign.endMonth) return sign
+                        return sign // Нашли совпадение, возвращаем этот знак и выходим из функции
+                    }
+                } else {
+                    // Козерог (единственный знак, переходящий через Новый год)
+                    if ((month == sign.startMonth && day >= sign.startDay) ||
+                        (month == sign.endMonth && day <= sign.endDay)
+                    ) {
+                        return sign // Нашли совпадение для Козерога
                     }
                 }
-                return CAPRICORN;
             }
-            return TODO("Provide the return value")
+            return CAPRICORN
         }
     }
 }
