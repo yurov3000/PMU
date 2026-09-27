@@ -1,8 +1,12 @@
 package com.example.labs
 
+import android.content.Context
 import android.os.Bundle
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -11,17 +15,21 @@ import androidx.compose.ui.Modifier
 import com.example.labs.ui.theme.LabsTheme
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 
-// структура игрока
 data class Player(
     val fullName: String,
     val gender: String,
@@ -56,19 +64,17 @@ enum class ZodiacSign(
         fun getZodiac(month: Int, day: Int): ZodiacSign {
             for (sign in values()) {
                 if (sign.startMonth < sign.endMonth) {
-                    // Обычные знаки (например, Телец: с 4 по 5 месяц)
                     if ((month == sign.startMonth && day >= sign.startDay) ||
                         (month == sign.endMonth && day <= sign.endDay) ||
                         (month > sign.startMonth && month < sign.endMonth)
                     ) {
-                        return sign // Нашли совпадение, возвращаем этот знак и выходим из функции
+                        return sign
                     }
                 } else {
-                    // Козерог (единственный знак, переходящий через Новый год)
                     if ((month == sign.startMonth && day >= sign.startDay) ||
                         (month == sign.endMonth && day <= sign.endDay)
                     ) {
-                        return sign // Нашли совпадение для Козерога
+                        return sign
                     }
                 }
             }
@@ -77,21 +83,52 @@ enum class ZodiacSign(
     }
 }
 
+data class GameSettings(
+    var gameSpeed: Int = 50,
+    var maxCockroaches: Int = 10,
+    var bonusInterval: Int = 5,
+    var roundDuration: Int = 60
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             LabsTheme {
-                RegistrationScreen()
+                MainScreen();
             }
         }
     }
 }
 
+@Composable
+fun MainScreen() {
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabs = listOf("Регистрация", "Правила", "Авторы", "Настройки")
+
+    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+        TabRow(selectedTabIndex = selectedTab) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = { Text(title) }
+                )
+            }
+        }
+        when (selectedTab) {
+            0 -> RegistrationTab()
+            1 -> RulesTab()
+            2 -> AuthorsTab()
+            3 -> SettingsTab()
+        }
+    }
+}
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegistrationScreen() {
-    // Состояние полей
+fun RegistrationTab() {
     var fullName by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("Мужской") }
     var course by remember { mutableStateOf("1") }
@@ -100,10 +137,8 @@ fun RegistrationScreen() {
     var month by remember { mutableStateOf("1") }
     var year by remember { mutableStateOf("2000") }
 
-    // Состояния для выпадающего списка
     var courseExpanded by remember { mutableStateOf(false) }
 
-    // Результат
     var player by remember { mutableStateOf<Player?>(null) }
 
     val courses = listOf("1", "2", "3", "4", "5", "6")
@@ -118,7 +153,6 @@ fun RegistrationScreen() {
     ) {
         Text("Регистрация игрока", fontSize = 24.sp, fontWeight = FontWeight.Bold)
 
-        // ФИО
         OutlinedTextField(
             value = fullName,
             onValueChange = { fullName = it },
@@ -127,7 +161,6 @@ fun RegistrationScreen() {
             singleLine = true
         )
 
-        // Пол (RadioButton)
         Text("Пол:", fontWeight = FontWeight.Medium)
         Row {
             genders.forEach { g ->
@@ -141,7 +174,7 @@ fun RegistrationScreen() {
             }
         }
 
-        // Курс (ComboBox / Dropdown)
+
         Text("Курс:", fontWeight = FontWeight.Medium)
         ExposedDropdownMenuBox(
             expanded = courseExpanded,
@@ -173,7 +206,6 @@ fun RegistrationScreen() {
             }
         }
 
-        // Уровень сложности (SeekBar → Slider)
         Text("Сложность: ${difficulty.toInt()}%", fontWeight = FontWeight.Medium)
         Slider(
             value = difficulty,
@@ -183,7 +215,6 @@ fun RegistrationScreen() {
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Дата рождения (вместо CalendarView — три поля, т.к. в Compose нет встроенного CalendarView)
         Text("Дата рождения:", fontWeight = FontWeight.Medium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
@@ -206,7 +237,6 @@ fun RegistrationScreen() {
             )
         }
 
-        // Кнопка
         Button(
             onClick = {
                 val d = day.toIntOrNull() ?: 1
@@ -231,7 +261,6 @@ fun RegistrationScreen() {
             Text("Зарегистрироваться", fontSize = 16.sp)
         }
 
-        // Вывод результата (TextView)
         if (player != null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -245,10 +274,12 @@ fun RegistrationScreen() {
                     Text("Курс: ${player!!.course}")
                     Text("Сложность: ${player!!.difficulty}%")
                     Text("Дата рождения: ${player!!.birthDay}.${player!!.birthMonth}.${player!!.birthYear}")
-                    Text("Знак зодиака: ${player!!.zodiacSign.nameUser}", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Знак зодиака: ${player!!.zodiacSign.nameUser}",
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Изображение знака зодиака (ImageBox)
                     Image(
                         painter = painterResource(id = player!!.zodiacSign.imageRes),
                         contentDescription = player!!.zodiacSign.nameUser,
@@ -261,3 +292,151 @@ fun RegistrationScreen() {
         }
     }
 }
+
+@Composable
+fun RulesTab() {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+        Text("Правила игры", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    webViewClient = WebViewClient()
+                    loadUrl("file:///android_asset/rules.html")
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
+fun AuthorsTab() {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+        Text("Авторы проекта", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(16.dp))
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(authorsList) { author ->
+                AuthorCard(author)
+            }
+        }
+    }
+}
+
+@Composable
+fun AuthorCard(author: Author) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Фото автора
+            Image(
+                painter = painterResource(id = author.photoRes),
+                contentDescription = "Фото ${author.name}",
+                modifier = Modifier
+                    .size(60.dp)
+                    .padding(end = 12.dp)
+            )
+            // Имя автора
+            Text(
+                text = author.name,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsTab() {
+    val context = LocalContext.current
+
+    val sharedPreferences = context.getSharedPreferences("GameSettings", Context.MODE_PRIVATE)
+
+    val savedSpeed = sharedPreferences.getInt("game_speed", 50)
+    val savedCockroaches = sharedPreferences.getInt("max_cockroaches", 10).toString()
+    val savedBonus = sharedPreferences.getInt("bonus_interval", 5).toString()
+    val savedDuration = sharedPreferences.getInt("round_duration", 60).toString()
+
+    var gameSpeed by remember { mutableStateOf(savedSpeed) }
+    var maxCockroaches by remember { mutableStateOf(savedCockroaches) }
+    var bonusInterval by remember { mutableStateOf(savedBonus) }
+    var roundDuration by remember { mutableStateOf(savedDuration) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Настройки игры", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+
+        Text("Скорость игры: $gameSpeed%", fontWeight = FontWeight.Medium)
+        Slider(
+            value = gameSpeed.toFloat(),
+            onValueChange = { gameSpeed = it.toInt() },
+            valueRange = 10f..100f,
+            steps = 17,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = maxCockroaches,
+            onValueChange = { maxCockroaches = it },
+            label = { Text("Макс. тараканов на экране") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = bonusInterval,
+            onValueChange = { bonusInterval = it },
+            label = { Text("Интервал бонусов (сек)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = roundDuration,
+            onValueChange = { roundDuration = it },
+            label = { Text("Длительность раунда (сек)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Button(
+            onClick = {
+                val sharedPreferences = context.getSharedPreferences(
+                    "GameSettings",
+                    Context.MODE_PRIVATE)
+                sharedPreferences.edit().apply {
+                    putInt("game_speed", gameSpeed)
+                    putInt("max_cockroaches", maxCockroaches.toIntOrNull() ?: 10)
+                    putInt("bonus_interval", bonusInterval.toIntOrNull() ?: 5)
+                    putInt("round_duration", roundDuration.toIntOrNull() ?: 60)
+                }.apply()
+                android.widget.Toast.makeText(
+                    context,
+                    "Настройки успешно применены",
+                    android.widget.Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+        ) {
+            Text("Сохранить настройки", fontSize = 16.sp)
+        }
+    }
+}
+
+
