@@ -36,6 +36,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 
 
 
@@ -142,7 +146,13 @@ fun MainScreen() {
                 1 -> RulesTab()
                 2 -> AuthorsTab()
                 3 -> SettingsTab()
-                4 -> GameTab();
+                4 -> GameTab(
+                    onNavigateToTab = { tabIndex ->
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(tabIndex)
+                        }
+                    }
+                )
             }
         }
     }
@@ -364,7 +374,6 @@ fun AuthorCard(author: Author) {
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Фото автора
             Image(
                 painter = painterResource(id = author.photoRes),
                 contentDescription = "Фото ${author.name}",
@@ -372,7 +381,6 @@ fun AuthorCard(author: Author) {
                     .size(60.dp)
                     .padding(end = 12.dp)
             )
-            // Имя автора
             Text(
                 text = author.name,
                 fontSize = 16.sp,
@@ -463,7 +471,7 @@ fun SettingsTab() {
 }
 
 @Composable
-fun GameTab() {
+fun GameTab(onNavigateToTab: (Int) -> Unit) {
     val context = LocalContext.current
     val density = LocalDensity.current
 
@@ -472,6 +480,7 @@ fun GameTab() {
     var timeLeft by remember { mutableStateOf(60) }
     var isPlaying by remember { mutableStateOf(false) }
     var gameStarted by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
 
     val sharedPreferences = context.getSharedPreferences("GameSettings", Context.MODE_PRIVATE)
     val maxBugs = sharedPreferences.getInt("max_cockroaches", 10)
@@ -520,6 +529,22 @@ fun GameTab() {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Игра", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { showMenu = !showMenu }) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Меню"
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text("Очки: $score", fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -544,7 +569,6 @@ fun GameTab() {
                             var hit = false
                             for (i in bugs.indices.reversed()) {
                                 val bug = bugs[i]
-                                // offset приходит в пикселях, bug.x/y тоже в пикселях. Всё сходится.
                                 if (offset.x >= bug.x &&
                                     offset.x <= bug.x + bug.size &&
                                     offset.y >= bug.y &&
@@ -564,7 +588,6 @@ fun GameTab() {
                     }
                 }
         ) {
-            // ИСПРАВЛЕННАЯ ОТРИСОВКА: переводим пиксели в dp корректно
             bugs.forEach { bug ->
                 Image(
                     painter = painterResource(id = bug.imageRes),
@@ -578,21 +601,78 @@ fun GameTab() {
                 )
             }
 
-            if (!gameStarted) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Button(onClick = {
-                        gameStarted = true
-                        isPlaying = true
-                        timeLeft = roundDuration
-                        score = 0
-                        misses = 0
-                        bugs.clear()
-                    }) {
-                        Text("Начать игру", fontSize = 20.sp)
+            if (showMenu) {
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Меню", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                showMenu = false
+                                onNavigateToTab(1)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Правила")
+                        }
+
+                        Button(
+                            onClick = {
+                                showMenu = false
+                                onNavigateToTab(2)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Авторы")
+                        }
+
+                        Button(
+                            onClick = {
+                                showMenu = false
+                                onNavigateToTab(3)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Настройки")
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { showMenu = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Закрыть")
+                        }
                     }
                 }
             }
 
+            if (!gameStarted) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Button(onClick = {
+                            gameStarted = true
+                            isPlaying = true
+                            timeLeft = roundDuration
+                            score = 0
+                            misses = 0
+                            bugs.clear()
+                        }) {
+                            Text("Начать игру", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Нажмите ☰ для меню", fontSize = 14.sp, color = Color.Gray)
+                    }
+                }
+            }
+
+            // Экран конца игры
             if (gameStarted && !isPlaying && timeLeft == 0) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -600,6 +680,30 @@ fun GameTab() {
                         Text("Счёт: $score", fontSize = 20.sp)
                         Text("Промахи: $misses", fontSize = 20.sp)
                         Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = { onNavigateToTab(3) }, // Настройки
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Настройки")
+                        }
+
+                        Button(
+                            onClick = { onNavigateToTab(1) }, // Правила
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Правила")
+                        }
+
+                        Button(
+                            onClick = { onNavigateToTab(2) }, // Авторы
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Авторы")
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         Button(onClick = {
                             score = 0
                             misses = 0
