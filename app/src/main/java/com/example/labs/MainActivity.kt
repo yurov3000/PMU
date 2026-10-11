@@ -6,7 +6,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -14,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.example.labs.ui.theme.LabsTheme
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,7 +25,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +34,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+
+
 
 data class Player(
     val fullName: String,
@@ -107,7 +113,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
-    val tabs = listOf("Регистрация", "Правила", "Авторы", "Настройки")
+    val tabs = listOf("Регистрация", "Правила", "Авторы", "Настройки", "ИГРА")
     val pagerState = rememberPagerState { tabs.size }
     val coroutineScope = rememberCoroutineScope()
 
@@ -136,6 +142,7 @@ fun MainScreen() {
                 1 -> RulesTab()
                 2 -> AuthorsTab()
                 3 -> SettingsTab()
+                4 -> GameTab();
             }
         }
     }
@@ -455,4 +462,158 @@ fun SettingsTab() {
     }
 }
 
+@Composable
+fun GameTab() {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+
+    var score by remember { mutableStateOf(0) }
+    var misses by remember { mutableStateOf(0) }
+    var timeLeft by remember { mutableStateOf(60) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var gameStarted by remember { mutableStateOf(false) }
+
+    val sharedPreferences = context.getSharedPreferences("GameSettings", Context.MODE_PRIVATE)
+    val maxBugs = sharedPreferences.getInt("max_cockroaches", 10)
+    val roundDuration = sharedPreferences.getInt("round_duration", 60)
+
+    val bugs = remember { mutableStateListOf<Bug>() }
+
+    var fieldWidthPx by remember { mutableStateOf(0f) }
+    var fieldHeightPx by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (timeLeft > 0) {
+                kotlinx.coroutines.delay(1000)
+                timeLeft--
+            }
+            isPlaying = false
+            bugs.clear()
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (isPlaying) {
+                kotlinx.coroutines.delay(32)
+                bugs.forEach { bug ->
+                    updateBugPosition(bug, fieldWidthPx, fieldHeightPx)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (isPlaying && bugs.size < maxBugs) {
+                kotlinx.coroutines.delay(1000)
+                if (bugs.size < maxBugs && fieldWidthPx > 0 && fieldHeightPx > 0) {
+                    bugs.add(createBug(bugs.size, fieldWidthPx, fieldHeightPx))
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Очки: $score", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Промахи: $misses", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Время: $timeLeft", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color.LightGray)
+                .onSizeChanged { size ->
+                    fieldWidthPx = size.width.toFloat()
+                    fieldHeightPx = size.height.toFloat()
+                }
+                .pointerInput(isPlaying) {
+                    if (isPlaying) {
+                        detectTapGestures { offset ->
+                            var hit = false
+                            for (i in bugs.indices.reversed()) {
+                                val bug = bugs[i]
+                                // offset приходит в пикселях, bug.x/y тоже в пикселях. Всё сходится.
+                                if (offset.x >= bug.x &&
+                                    offset.x <= bug.x + bug.size &&
+                                    offset.y >= bug.y &&
+                                    offset.y <= bug.y + bug.size
+                                ) {
+                                    bugs.removeAt(i)
+                                    score += 10
+                                    hit = true
+                                    break
+                                }
+                            }
+                            if (!hit) {
+                                misses++
+                                score = (score - 5).coerceAtLeast(0)
+                            }
+                        }
+                    }
+                }
+        ) {
+            // ИСПРАВЛЕННАЯ ОТРИСОВКА: переводим пиксели в dp корректно
+            bugs.forEach { bug ->
+                Image(
+                    painter = painterResource(id = bug.imageRes),
+                    contentDescription = "Жук",
+                    modifier = Modifier
+                        .size(with(density) { bug.size.toDp() })
+                        .offset(
+                            x = with(density) { bug.x.toDp() },
+                            y = with(density) { bug.y.toDp() }
+                        )
+                )
+            }
+
+            if (!gameStarted) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Button(onClick = {
+                        gameStarted = true
+                        isPlaying = true
+                        timeLeft = roundDuration
+                        score = 0
+                        misses = 0
+                        bugs.clear()
+                    }) {
+                        Text("Начать игру", fontSize = 20.sp)
+                    }
+                }
+            }
+
+            if (gameStarted && !isPlaying && timeLeft == 0) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Игра окончена!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("Счёт: $score", fontSize = 20.sp)
+                        Text("Промахи: $misses", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = {
+                            score = 0
+                            misses = 0
+                            timeLeft = roundDuration
+                            bugs.clear()
+                            isPlaying = true
+                            gameStarted = false
+                        }) {
+                            Text("Играть снова", fontSize = 20.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
