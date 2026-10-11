@@ -42,7 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 
 
-
 data class Player(
     val fullName: String,
     val gender: String,
@@ -121,7 +120,9 @@ fun MainScreen() {
     val pagerState = rememberPagerState { tabs.size }
     val coroutineScope = rememberCoroutineScope()
 
-    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .systemBarsPadding()) {
         PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
             tabs.forEachIndexed { index, title ->
                 Tab(
@@ -174,7 +175,7 @@ fun RegistrationTab() {
 
     var player by remember { mutableStateOf<Player?>(null) }
 
-    val courses = listOf("1", "2", "3", "4", "5", "6")
+    val courses = listOf("1", "2", "3", "4")
     val genders = listOf("Мужской", "Женский")
 
     Column(
@@ -328,9 +329,11 @@ fun RegistrationTab() {
 
 @Composable
 fun RulesTab() {
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
         Text("Правила игры", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
         AndroidView(
@@ -347,9 +350,11 @@ fun RulesTab() {
 
 @Composable
 fun AuthorsTab() {
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
         Text("Авторы проекта", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
         LazyColumn(
@@ -449,7 +454,8 @@ fun SettingsTab() {
             onClick = {
                 val sharedPreferences = context.getSharedPreferences(
                     "GameSettings",
-                    Context.MODE_PRIVATE)
+                    Context.MODE_PRIVATE
+                )
                 sharedPreferences.edit().apply {
                     putInt("game_speed", gameSpeed)
                     putInt("max_cockroaches", maxCockroaches.toIntOrNull() ?: 10)
@@ -459,7 +465,8 @@ fun SettingsTab() {
                 android.widget.Toast.makeText(
                     context,
                     "Настройки успешно применены",
-                    android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -525,7 +532,9 @@ fun GameTab(onNavigateToTab: (Int) -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -682,21 +691,21 @@ fun GameTab(onNavigateToTab: (Int) -> Unit) {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
-                            onClick = { onNavigateToTab(3) }, // Настройки
+                            onClick = { onNavigateToTab(3) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Настройки")
                         }
 
                         Button(
-                            onClick = { onNavigateToTab(1) }, // Правила
+                            onClick = { onNavigateToTab(1) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Правила")
                         }
 
                         Button(
-                            onClick = { onNavigateToTab(2) }, // Авторы
+                            onClick = { onNavigateToTab(2) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Авторы")
