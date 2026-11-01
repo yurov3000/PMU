@@ -1,10 +1,17 @@
 package com.example.labs
 
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import kotlinx.coroutines.delay
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -16,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +49,7 @@ import androidx.compose.material.icons.filled.Person
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.random.Random
 
 enum class ZodiacSign(
     val nameUser: String,
@@ -761,6 +770,68 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
     var fieldWidthPx by remember { mutableStateOf(0f) }
     var fieldHeightPx by remember { mutableStateOf(0f) }
 
+    // Bonus & Tilt state
+    val sensorManager = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
+    var tiltX by remember { mutableStateOf(0f) }
+    var tiltY by remember { mutableStateOf(0f) }
+    var isTiltActive by remember { mutableStateOf(false) }
+    var tiltSecondsLeft by remember { mutableStateOf(0) }
+    var bonusItem by remember { mutableStateOf<BonusItem?>(null) }
+
+    DisposableEffect(isTiltActive) {
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+                    tiltX = event.values[0]
+                    tiltY = event.values[1]
+                }
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+        if (isTiltActive) {
+            val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+        }
+        onDispose {
+            sensorManager.unregisterListener(listener)
+        }
+    }
+
+    LaunchedEffect(isTiltActive) {
+        if (isTiltActive) {
+            tiltSecondsLeft = 10
+            while (tiltSecondsLeft > 0 && isTiltActive) {
+                delay(1000)
+                tiltSecondsLeft--
+            }
+            isTiltActive = false
+        }
+    }
+
+    // Spawn bonus every 15 seconds
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (isPlaying) {
+                delay(15000)
+                if (isPlaying && fieldWidthPx > 0 && fieldHeightPx > 0 && bonusItem == null) {
+                    val size = 70f
+                    bonusItem = BonusItem(
+                        id = (0..1000).random(),
+                        x = Random.nextFloat() * (fieldWidthPx - 150f) + 50f,
+                        y = Random.nextFloat() * (fieldHeightPx - 150f) + 50f,
+                        size = size
+                    )
+                    coroutineScope.launch {
+                        delay(6000)
+                        if (bonusItem != null) {
+                            bonusItem = null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             while (timeLeft > 0) {
@@ -769,6 +840,8 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
             }
             isPlaying = false
             bugs.clear()
+            bonusItem = null
+            isTiltActive = false
         }
     }
 
@@ -777,7 +850,7 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
             while (isPlaying) {
                 delay(32)
                 bugs.forEach { bug ->
-                    updateBugPosition(bug, fieldWidthPx, fieldHeightPx)
+                    updateBugPosition(bug, fieldWidthPx, fieldHeightPx, tiltX, tiltY, isTiltActive)
                 }
             }
         }
@@ -824,6 +897,16 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
             Text("Время: $timeLeft", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
+        if (isTiltActive) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "БОНУС АКТИВЕН: Наклон учитывается! ($tiltSecondsLeft сек)",
+                color = Color.Red,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Box(
@@ -838,6 +921,25 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
                 .pointerInput(isPlaying) {
                     if (isPlaying) {
                         detectTapGestures { offset ->
+                            // Check bonus tap
+                            val currentBonus = bonusItem
+                            if (currentBonus != null &&
+                                offset.x >= currentBonus.x && offset.x <= currentBonus.x + currentBonus.size &&
+                                offset.y >= currentBonus.y && offset.y <= currentBonus.y + currentBonus.size
+                            ) {
+                                bonusItem = null
+                                isTiltActive = true
+                                try {
+                                    val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 500)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                                Toast.makeText(context, "КРИК ЖУКОВ! Наклон телефона активен!", Toast.LENGTH_SHORT).show()
+                                return@detectTapGestures
+                            }
+
+                            // Check bug tap
                             var hit = false
                             for (i in bugs.indices.reversed()) {
                                 val bug = bugs[i]
@@ -871,6 +973,23 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
                             y = with(density) { bug.y.toDp() }
                         )
                 )
+            }
+
+            // Render Bonus Item
+            if (bonusItem != null) {
+                val b = bonusItem!!
+                Box(
+                    modifier = Modifier
+                        .size(with(density) { b.size.toDp() })
+                        .offset(
+                            x = with(density) { b.x.toDp() },
+                            y = with(density) { b.y.toDp() }
+                        )
+                        .background(Color.Yellow, shape = CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("⭐", fontSize = 24.sp)
+                }
             }
 
             if (showMenu) {
@@ -935,6 +1054,8 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
                             score = 0
                             misses = 0
                             scoreSaved = false
+                            bonusItem = null
+                            isTiltActive = false
                             bugs.clear()
                         }) {
                             Text("Начать игру", fontSize = 20.sp)
@@ -988,6 +1109,8 @@ fun GameTab(db: AppDatabase, activeUser: UserEntity?, onNavigateToTab: (Int) -> 
                                 timeLeft = roundDuration
                                 bugs.clear()
                                 scoreSaved = false
+                                bonusItem = null
+                                isTiltActive = false
                                 isPlaying = true
                                 gameStarted = false
                             },
